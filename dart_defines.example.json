@@ -1,0 +1,8 @@
+{
+  "_comment": "Copy this file to dart_defines.json and fill in real values. dart_defines.json is gitignored. Run with: flutter run --dart-define-from-file=dart_defines.json",
+
+  "MORI_API_BASE_URL": "http://192.168.1.10:8080",
+
+  "MORI_GOOGLE_CLIENT_ID": "REPLACE-WITH-IOS-CLIENT-ID.apps.googleusercontent.com",
+  "MORI_GOOGLE_SERVER_CLIENT_ID": "REPLACE-WITH-WEB-CLIENT-ID.apps.googleusercontent.com"
+}

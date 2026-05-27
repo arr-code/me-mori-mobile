@@ -1,0 +1,87 @@
+name: me_mori
+description: "Me Mori — schedule & reminder assistant"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # State management
+  flutter_riverpod: ^2.5.1
+  riverpod_annotation: ^2.3.5
+
+  # Routing
+  go_router: ^14.2.0
+
+  # Networking
+  dio: ^5.5.0
+  json_annotation: ^4.9.0
+
+  # Local storage
+  flutter_secure_storage: ^9.2.2
+  path_provider: ^2.1.4
+  shared_preferences: ^2.3.0
+  # isar + isar_flutter_libs added in Phase 3 (offline agenda cache)
+
+  # UI
+  google_fonts: ^6.2.1
+  phosphor_flutter: ^2.1.0
+  flutter_svg: ^2.0.10
+  intl: ^0.20.0
+
+  # Auth
+  google_sign_in: ^6.2.1
+
+  # Animations
+  lottie: ^3.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+
+  build_runner: ^2.4.11
+  riverpod_generator: ^2.4.0
+  json_serializable: ^6.8.0
+  custom_lint: ^0.7.0
+  riverpod_lint: ^2.6.0
+  # isar_generator added in Phase 3
+
+  flutter_launcher_icons: ^0.13.1
+  flutter_native_splash: ^2.4.1
+
+flutter:
+  uses-material-design: true
+  generate: true
+
+  assets:
+    - assets/icon/
+
+flutter_launcher_icons:
+  android: "ic_launcher"
+  ios: true
+  image_path: "assets/icon/icon.png"
+  remove_alpha_ios: true
+  adaptive_icon_background: "#0F0E17"
+  adaptive_icon_foreground: "assets/icon/icon.png"
+  min_sdk_android: 26
+
+flutter_native_splash:
+  color: "#F7F5F0"
+  color_dark: "#0F0E17"
+  image: "assets/icon/icon.png"
+  image_dark: "assets/icon/icon.png"
+  android_12:
+    color: "#F7F5F0"
+    color_dark: "#0F0E17"
+    image: "assets/icon/icon.png"
+    image_dark: "assets/icon/icon.png"
