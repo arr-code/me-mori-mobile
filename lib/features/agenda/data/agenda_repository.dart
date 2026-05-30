@@ -14,11 +14,12 @@ class AgendaRepository {
   final AgendaApi api;
   AgendaRepository({required this.api});
 
-  Future<List<Agenda>> fetchRange({
-    required DateTime from,
-    required DateTime to,
-  }) =>
-      _run(() => api.getRange(from: from, to: to));
+  Future<List<Agenda>> fetchToday() => _run(() => api.getToday());
+
+  Future<List<Agenda>> fetchWeek() => _run(() => api.getWeek());
+
+  Future<List<Agenda>> fetchByDate(DateTime date) =>
+      _run(() => api.getByDate(date));
 
   Future<Agenda> create(CreateAgendaRequest body) =>
       _run(() => api.create(body));
@@ -34,8 +35,8 @@ class AgendaRepository {
 
   Future<void> delete(String id) => _run(() => api.delete(id));
 
-  Future<void> deleteBatch(List<String> agendaIds) =>
-      _run(() => api.deleteBatch(agendaIds));
+  Future<void> deleteBatch(List<String> ids) =>
+      _run(() => api.deleteBatch(ids));
 
   Future<Agenda> toggleDone(String id) => _run(() => api.toggleDone(id));
 

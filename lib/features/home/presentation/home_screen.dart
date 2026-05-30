@@ -156,7 +156,9 @@ class _Header extends ConsumerWidget {
   static int _countGaps(List<Agenda> items) {
     var count = 0;
     for (var i = 1; i < items.length; i++) {
-      final gap = items[i].startTime.difference(items[i - 1].endTime);
+      final prevEnd = items[i - 1].endTime;
+      if (prevEnd == null) continue;
+      final gap = items[i].startTime.difference(prevEnd);
       if (gap.inMinutes >= HomeScreen._gapThresholdMinutes) count++;
     }
     return count;
@@ -256,7 +258,6 @@ class _TabStrip extends ConsumerWidget {
   static const _tabs = <(HomeTab, String)>[
     (HomeTab.today, 'Hari ini'),
     (HomeTab.thisWeek, 'Minggu ini'),
-    (HomeTab.upcoming, 'Selanjutnya'),
   ];
 
   @override
@@ -378,10 +379,11 @@ List<_TimelineEntry> _buildTimelineEntries(
   final out = <_TimelineEntry>[];
   Agenda? prev;
   for (final cur in items) {
-    if (prev != null) {
-      final gap = cur.startTime.difference(prev.endTime);
+    final prevEnd = prev?.endTime;
+    if (prevEnd != null) {
+      final gap = cur.startTime.difference(prevEnd);
       if (gap.inMinutes >= gapThresholdMinutes) {
-        out.add(_GapEntry(prev.endTime, cur.startTime));
+        out.add(_GapEntry(prevEnd, cur.startTime));
       }
     }
     out.add(_AgendaEntry(cur));
@@ -431,11 +433,6 @@ class _EmptyState extends StatelessWidget {
         return (
           title: 'Minggu ini lapang.',
           hint: 'Belum ada jadwal untuk minggu ini.',
-        );
-      case HomeTab.upcoming:
-        return (
-          title: 'Belum ada agenda mendatang.',
-          hint: 'Mau atur jadwal untuk minggu depan?',
         );
     }
   }

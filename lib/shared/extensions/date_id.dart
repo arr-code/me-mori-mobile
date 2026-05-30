@@ -31,8 +31,11 @@ class DateId {
     return '$h.$m';
   }
 
-  static String timeRange(DateTime start, DateTime end) =>
-      '${time(start)} – ${time(end)}';
+  /// Time range "09.00 – 10.00". When [end] is null, falls back to just
+  /// the start time (e.g. for agenda items the backend hasn't picked an
+  /// end for yet).
+  static String timeRange(DateTime start, DateTime? end) =>
+      end == null ? time(start) : '${time(start)} – ${time(end)}';
 
   static String monthYear(DateTime dt) =>
       DateFormat('MMMM y', _locale).format(dt.toLocal());

@@ -13,28 +13,30 @@ class AgendaApi {
   final Dio _dio;
   AgendaApi(this._dio);
 
-  /// `GET /api/agenda?from=YYYY-MM-DD&to=YYYY-MM-DD`. Returns the agenda
-  /// items whose `start_time` falls within the inclusive range. Server
-  /// is expected to use the user's stored timezone when bucketing.
-  Future<List<Agenda>> getRange({
-    required DateTime from,
-    required DateTime to,
-  }) async {
+  /// `GET /api/agenda/today` — current day. Server bucketing uses the
+  /// user's stored timezone.
+  Future<List<Agenda>> getToday() async {
+    final res = await _dio.get<List<dynamic>>('/api/agenda/today');
+    return _decodeList(res.data);
+  }
+
+  /// `GET /api/agenda/week` — Monday → Sunday of the current week.
+  Future<List<Agenda>> getWeek() async {
+    final res = await _dio.get<List<dynamic>>('/api/agenda/week');
+    return _decodeList(res.data);
+  }
+
+  /// `GET /api/agenda?date=YYYY-MM-DD` — items on a specific date.
+  Future<List<Agenda>> getByDate(DateTime date) async {
     final fmt = DateFormat('yyyy-MM-dd');
     final res = await _dio.get<List<dynamic>>(
       '/api/agenda',
-      queryParameters: {
-        'from': fmt.format(from),
-        'to': fmt.format(to),
-      },
+      queryParameters: {'date': fmt.format(date)},
     );
-    return (res.data ?? const [])
-        .cast<Map<String, dynamic>>()
-        .map(Agenda.fromJson)
-        .toList();
+    return _decodeList(res.data);
   }
 
-  /// `POST /api/agenda` — single-item create.
+  /// `POST /api/agenda` — single create. Min body: `title` + `start_time`.
   Future<Agenda> create(CreateAgendaRequest body) async {
     final res = await _dio.post<Map<String, dynamic>>(
       '/api/agenda',
@@ -43,22 +45,17 @@ class AgendaApi {
     return Agenda.fromJson(res.data!);
   }
 
-  /// `POST /api/agenda/batch` — bulk create. `items` are passed through
-  /// in whatever shape the chat action handed us (typically with
-  /// `title`/`start_time`/`end_time`/`description`); backend handles
-  /// field normalisation.
+  /// `POST /api/agenda/batch` — bulk create. Response shape is
+  /// `{ "created": [Agenda, ...] }`.
   Future<List<Agenda>> createBatch(List<Map<String, dynamic>> items) async {
-    final res = await _dio.post<List<dynamic>>(
+    final res = await _dio.post<Map<String, dynamic>>(
       '/api/agenda/batch',
       data: {'items': items},
     );
-    return (res.data ?? const [])
-        .cast<Map<String, dynamic>>()
-        .map(Agenda.fromJson)
-        .toList();
+    return _decodeList(res.data?['created']);
   }
 
-  /// `PATCH /api/agenda/:id` — partial update of one item.
+  /// `PATCH /api/agenda/:id` — partial single update.
   Future<Agenda> update(String id, UpdateAgendaRequest body) async {
     final res = await _dio.patch<Map<String, dynamic>>(
       '/api/agenda/$id',
@@ -68,37 +65,40 @@ class AgendaApi {
   }
 
   /// `PATCH /api/agenda/batch` — bulk partial update. Each item carries
-  /// `agenda_id` + only the fields that change.
+  /// `agenda_id` + only the fields that change. Response shape is
+  /// `{ "updated": [Agenda, ...] }`.
   Future<List<Agenda>> updateBatch(List<Map<String, dynamic>> items) async {
-    final res = await _dio.patch<List<dynamic>>(
+    final res = await _dio.patch<Map<String, dynamic>>(
       '/api/agenda/batch',
       data: {'items': items},
     );
-    return (res.data ?? const [])
-        .cast<Map<String, dynamic>>()
-        .map(Agenda.fromJson)
-        .toList();
+    return _decodeList(res.data?['updated']);
   }
 
-  /// `DELETE /api/agenda/:id` — single delete.
+  /// `DELETE /api/agenda/:id` — single delete. Server returns
+  /// `{ "deleted": true }` which we ignore.
   Future<void> delete(String id) =>
       _dio.delete<void>('/api/agenda/$id');
 
-  /// `DELETE /api/agenda/batch` — bulk delete. Body sends `agenda_ids`
-  /// array; adjust here if the backend expects a different shape.
-  Future<void> deleteBatch(List<String> agendaIds) async {
+  /// `DELETE /api/agenda/batch` — bulk delete. Body uses `ids`, not
+  /// `agenda_ids`.
+  Future<void> deleteBatch(List<String> ids) async {
     await _dio.delete<void>(
       '/api/agenda/batch',
-      data: {'agenda_ids': agendaIds},
+      data: {'ids': ids},
     );
   }
 
   /// `PATCH /api/agenda/:id/done` — flip the `is_done` flag on one item.
-  /// Sent without a body — the backend toggles the current state.
   Future<Agenda> toggleDone(String id) async {
     final res = await _dio.patch<Map<String, dynamic>>(
       '/api/agenda/$id/done',
     );
     return Agenda.fromJson(res.data!);
+  }
+
+  List<Agenda> _decodeList(Object? raw) {
+    if (raw is! List) return const [];
+    return raw.cast<Map<String, dynamic>>().map(Agenda.fromJson).toList();
   }
 }

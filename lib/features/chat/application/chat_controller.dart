@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +11,7 @@ import '../../agenda/data/dto/agenda_requests.dart';
 import '../data/chat_repository.dart';
 import '../data/dto/chat_requests.dart';
 import '../data/models/action_card.dart';
+import '../data/models/chat_turn.dart';
 import 'chat_state.dart';
 
 final chatControllerProvider =
@@ -21,11 +24,30 @@ class ChatController extends Notifier<ChatState> {
   ChatRepository get _chat => ref.read(chatRepositoryProvider);
   AgendaRepository get _agenda => ref.read(agendaRepositoryProvider);
 
+  /// Hydrate the transcript from `GET /api/chat/turns?limit=N` — called
+  /// once when the chat screen mounts. Existing in-memory items are
+  /// replaced. Failures set `state.error`; the user can retry by tapping
+  /// "↻ ulangi" or pulling to refresh.
+  Future<void> loadHistory({int limit = 50}) async {
+    state = state.copyWith(sending: false, error: null);
+    try {
+      final turns = await _chat.getHistory(limit: limit);
+      state = state.copyWith(
+        items: _itemsFromTurns(turns),
+        error: null,
+      );
+    } on AppError catch (e) {
+      state = state.copyWith(error: e.message);
+    } catch (_) {
+      state = state.copyWith(error: CopyId.errNetwork);
+    }
+  }
+
   /// Append a user message optimistically, switch the transcript into a
   /// "typing" mode, then call `POST /api/chat`. Replaces the typing
-  /// indicator with the Mori reply bubble + optional action card. On
-  /// failure, the typing indicator is removed and an error banner is set
-  /// at the chat-screen level.
+  /// indicator with the Mori reply bubble + optional action card. Fires
+  /// `/turns/:id/seen` once the turn lands so the backend doesn't
+  /// resurface it on next reload.
   Future<void> send(String rawText) async {
     final text = rawText.trim();
     if (text.isEmpty || state.sending) return;
@@ -51,12 +73,7 @@ class ChatController extends Notifier<ChatState> {
       final turn = await _chat.send(ChatSendRequest(message: text));
       final base = _removeTrailingTyping(state.items);
       final replyTime = DateTime.now();
-      // Backend may omit `turn_id` — synthesize a local id so list keys
-      // stay stable. The chat controller commits actions by dispatching
-      // directly to /api/agenda endpoints, so the turn_id isn't load
-      // bearing for accept/reject.
-      final localId = '${replyTime.microsecondsSinceEpoch}';
-      final keyBase = turn.turnId ?? localId;
+      final keyBase = turn.turnId ?? '${replyTime.microsecondsSinceEpoch}';
 
       final newItems = <ChatItem>[
         ...base,
@@ -80,6 +97,14 @@ class ChatController extends Notifier<ChatState> {
         sending: false,
         error: null,
       );
+
+      // Lifecycle ping — fire-and-forget so a transient failure doesn't
+      // block the chat. Backend may not always echo the turn_id, in
+      // which case we skip the call.
+      final tid = turn.turnId;
+      if (tid != null && tid.isNotEmpty) {
+        unawaited(_markSeenSilently(tid));
+      }
     } on AppError catch (e) {
       state = state.copyWith(
         items: _removeTrailingTyping(state.items),
@@ -95,10 +120,18 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
-  /// Resolve a pending action card. Accept dispatches to the agenda
-  /// endpoint matching [PendingAction.type]; reject is local-only (no
-  /// server call). After a successful accept the today-agenda provider
-  /// is invalidated so the home timeline reflects the mutation.
+  /// Resolve a pending action card.
+  ///
+  /// Accept ordering, per backend contract:
+  ///   1. Execute the agenda mutation (`/api/agenda*`) — frontend owns
+  ///      this; backend won't do it implicitly.
+  ///   2. `POST /api/chat/turns/:id/accept` to flip server `mento_status`.
+  ///   3. Flip local UI to accepted + invalidate agenda providers.
+  /// If step 1 fails the user sees an error and the card stays pending;
+  /// if step 2 fails we still mark accepted locally (agenda already
+  /// landed) and surface a muted error.
+  ///
+  /// Reject: server call only, no agenda mutation.
   Future<void> decide(String itemId, ActionDecision decision) async {
     final idx = state.items.indexWhere((i) => i.id == itemId);
     if (idx < 0) return;
@@ -107,20 +140,39 @@ class ChatController extends Notifier<ChatState> {
     if (current.status != ActionCardStatus.pending) return;
     if (current.submitting) return;
 
-    if (decision == ActionDecision.reject) {
-      // Reject is purely a UI dismissal — the backend never created the
-      // agenda in the first place.
-      state = _replaceItem(
-        idx,
-        current.copyWith(status: ActionCardStatus.rejected),
-      );
-      return;
-    }
-
     state = _replaceItem(idx, current.copyWith(submitting: true));
 
     try {
+      if (decision == ActionDecision.reject) {
+        final tid = current.turnId;
+        if (tid != null && tid.isNotEmpty) {
+          await _chat.rejectTurn(tid);
+        }
+        state = _replaceItem(
+          idx,
+          current.copyWith(
+            status: ActionCardStatus.rejected,
+            submitting: false,
+          ),
+        );
+        return;
+      }
+
+      // Accept: agenda mutation first, then mark resolved server-side.
       await _commitToAgenda(current.action);
+
+      final tid = current.turnId;
+      if (tid != null && tid.isNotEmpty) {
+        try {
+          await _chat.acceptTurn(tid);
+        } on AppError catch (e) {
+          // Agenda already committed — log/surface but keep accepted.
+          if (kDebugMode) debugPrint('accept ping failed: ${e.message}');
+        } catch (e) {
+          if (kDebugMode) debugPrint('accept ping failed: $e');
+        }
+      }
+
       state = _replaceItem(
         idx,
         current.copyWith(
@@ -128,8 +180,8 @@ class ChatController extends Notifier<ChatState> {
           submitting: false,
         ),
       );
-      // Invalidate all tabs (today, thisWeek, upcoming) since Mori may
-      // have committed an agenda outside today's window.
+      // Invalidate all tabs since Mori may have written outside today's
+      // window.
       ref.invalidate(agendaForTabProvider);
       ref.invalidate(todayAgendaProvider);
     } on AppError catch (e) {
@@ -157,17 +209,55 @@ class ChatController extends Notifier<ChatState> {
     }
   }
 
+  Future<void> _markSeenSilently(String turnId) async {
+    try {
+      await _chat.markSeen(turnId);
+    } catch (e) {
+      if (kDebugMode) debugPrint('seen ping failed: $e');
+    }
+  }
+
+  // ── History → ChatItem flattening ────────────────────────────────────
+
+  List<ChatItem> _itemsFromTurns(List<ChatTurn> turns) {
+    final out = <ChatItem>[];
+    for (final t in turns) {
+      final s = t.summary;
+      final when = t.createdAt;
+      if ((s.userMessage ?? '').trim().isNotEmpty) {
+        out.add(UserMessageItem(
+          id: 'user-${t.id}',
+          createdAt: when,
+          text: s.userMessage!,
+        ));
+      }
+      if ((s.reply ?? '').trim().isNotEmpty) {
+        out.add(MoriMessageItem(
+          id: 'mori-${t.id}',
+          createdAt: when,
+          text: s.reply!,
+        ));
+      }
+      final action = s.pendingAction;
+      if (action != null) {
+        out.add(ActionCardItem(
+          id: 'card-${t.id}',
+          createdAt: when,
+          turnId: t.id,
+          action: action,
+          status: s.actionStatus,
+        ));
+      }
+    }
+    return out;
+  }
+
   // ── Commit dispatch ──────────────────────────────────────────────────
 
-  /// Maps a [PendingAction] to the appropriate agenda endpoint. Throws
-  /// [AppError] on backend failures; throws plain [StateError] when the
-  /// action shape is missing required fields the endpoint needs (e.g. an
-  /// update without `agenda_id`).
   Future<void> _commitToAgenda(PendingAction action) async {
     switch (action.type) {
       case ActionType.add:
-        final req = _createRequestFromItem(action.asSingleItem);
-        await _agenda.create(req);
+        await _agenda.create(_createRequestFromItem(action.asSingleItem));
         return;
       case ActionType.addBatch:
         await _agenda.createBatch(_itemsToJsonList(action.items));
@@ -213,9 +303,6 @@ class ChatController extends Notifier<ChatState> {
   CreateAgendaRequest _createRequestFromItem(ActionItem i) {
     final title = i.title;
     final startTime = i.startTime;
-    // Only `title` + `start_time` are required client-side. `end_time`,
-    // `description`, and `category` are backend-managed defaults when
-    // omitted — chat responses don't always carry them.
     if (title == null || title.isEmpty || startTime == null) {
       throw StateError('add_agenda butuh title + start_time non-null');
     }

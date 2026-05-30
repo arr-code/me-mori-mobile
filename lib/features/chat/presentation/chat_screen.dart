@@ -42,6 +42,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       final hasDraft = _input.text.trim().isNotEmpty;
       if (hasDraft != _hasDraft) setState(() => _hasDraft = hasDraft);
     });
+    // Hydrate transcript from GET /api/chat/turns on first mount. Safe
+    // to call even if state already has items — replaces in-place.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(chatControllerProvider.notifier).loadHistory();
+    });
   }
 
   @override
