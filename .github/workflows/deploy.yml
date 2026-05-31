@@ -33,13 +33,12 @@ jobs:
         run: flutter pub get
 
       - name: Build web
-        # MORI_GOOGLE_CLIENT_ID is intentionally empty on web so the
-        # google_sign_in plugin reads the client ID from the meta tag in
-        # web/index.html instead of the (Android) constructor value.
+        # On web the app uses MORI_GOOGLE_SERVER_CLIENT_ID (the Web OAuth
+        # client) as the sign-in clientId and omits serverClientId, so the
+        # Android client id is irrelevant here.
         run: |
           flutter build web --release \
             --dart-define=MORI_API_BASE_URL=${{ env.MORI_API_BASE_URL }} \
-            --dart-define=MORI_GOOGLE_CLIENT_ID= \
             --dart-define=MORI_GOOGLE_SERVER_CLIENT_ID=${{ env.MORI_GOOGLE_SERVER_CLIENT_ID }}
 
       - name: Authenticate to Google Cloud

@@ -15,6 +15,19 @@ import '../data/models/user.dart';
 import 'auth_state.dart';
 
 final googleSignInProvider = Provider<GoogleSignIn>((ref) {
+  // On web, `serverClientId` is unsupported (google_sign_in_web asserts on
+  // it). Instead the *web* OAuth client must be the `clientId`, and the
+  // returned idToken's audience becomes that web client — which is exactly
+  // what `googleServerClientId` (kn027…) is. So on web we use the web client
+  // as clientId and omit serverClientId; native keeps the original split.
+  if (kIsWeb) {
+    return GoogleSignIn(
+      clientId: Env.googleServerClientId.isEmpty
+          ? null
+          : Env.googleServerClientId,
+      scopes: const ['email', 'profile', 'openid'],
+    );
+  }
   return GoogleSignIn(
     clientId: Env.googleClientId.isEmpty ? null : Env.googleClientId,
     serverClientId:

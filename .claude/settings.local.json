@@ -7,7 +7,28 @@
       "Bash(flutter test *)",
       "Bash(flutter clean *)",
       "Bash(flutter pub *)",
-      "Bash(flutter analyze *)"
+      "Bash(flutter analyze *)",
+      "Bash(gcloud projects *)",
+      "Bash(gcloud run *)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}\\\\n' https://mori-web-187100390410.asia-southeast1.run.app)",
+      "Bash(curl -s https://mori-web-187100390410.asia-southeast1.run.app)",
+      "Bash(gh auth *)",
+      "Bash(gcloud config *)",
+      "Bash(gcloud iam *)",
+      "Bash(nohup python3 -m http.server 8088 --directory build/web)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\\\\n\" http://localhost:8088)",
+      "Bash(curl -s http://localhost:8088)",
+      "Bash(flutter build *)",
+      "Bash(pkill -f \"http.server 8088\")",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' http://localhost:8088)",
+      "Bash(echo \"status: $\\(curl -s -o /dev/null -w '%{http_code}' http://localhost:8088\\)\")",
+      "Bash(open http://localhost:8088)",
+      "Bash(git check-ignore *)",
+      "Bash(git add *)",
+      "Bash(git commit -q -m ' *)",
+      "Bash(git push *)",
+      "Bash(gh run *)",
+      "Bash(gcloud services *)"
     ]
   }
 }
