@@ -44,6 +44,11 @@ class ActionCardView extends StatelessWidget {
     final resolved = status != ActionCardStatus.pending;
     final hasCollision = action.hasCollision;
     final items = action.effectiveItems;
+    // "Ganti" (replace) only makes sense for a single proposed add that
+    // collides with an existing agenda we have an id for.
+    final canReplace = hasCollision &&
+        action.type == ActionType.add &&
+        action.collisions.first.id.isNotEmpty;
 
     return Align(
       alignment: Alignment.centerLeft,
@@ -82,6 +87,7 @@ class ActionCardView extends StatelessWidget {
                   _ActionRow(
                     status: status,
                     submitting: submitting,
+                    canReplace: canReplace,
                     onDecide: onDecide,
                   ),
                 ],
@@ -416,48 +422,91 @@ class _CollisionBlock extends StatelessWidget {
 class _ActionRow extends StatelessWidget {
   final ActionCardStatus status;
   final bool submitting;
+  final bool canReplace;
   final ActionDecisionHandler? onDecide;
 
   const _ActionRow({
     required this.status,
     required this.submitting,
+    required this.canReplace,
     required this.onDecide,
   });
 
   @override
   Widget build(BuildContext context) {
     final resolved = status != ActionCardStatus.pending;
+    final disabled = submitting || onDecide == null;
 
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: resolved
-          ? _StatusPill(status: status)
-          : Row(
+    if (resolved) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: _StatusPill(status: status),
+      );
+    }
+
+    final cancelBtn = MButton(
+      label: CopyId.batal,
+      size: MButtonSize.md,
+      variant: MButtonVariant.ghost,
+      onPressed: disabled ? null : () => onDecide!(ActionDecision.reject),
+    );
+
+    // On a collision a single proposed add can be resolved three ways:
+    // keep both ("Tetap tambah"), replace the colliding agenda ("Ganti"),
+    // or cancel. Stacked so the labels never overflow on phone widths.
+    if (canReplace) {
+      return Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          children: [
+            MButton(
+              label: CopyId.tetapTambah,
+              size: MButtonSize.md,
+              loading: submitting,
+              onPressed:
+                  disabled ? null : () => onDecide!(ActionDecision.accept),
+            ),
+            const SizedBox(height: MoriSpacing.s2),
+            Row(
               children: [
                 Expanded(
                   child: MButton(
-                    label: CopyId.setuju,
+                    label: CopyId.ganti,
                     size: MButtonSize.md,
-                    leadingIcon: Icons.check_rounded,
-                    loading: submitting,
-                    onPressed: submitting || onDecide == null
+                    variant: MButtonVariant.warn,
+                    leadingIcon: Icons.swap_horiz_rounded,
+                    onPressed: disabled
                         ? null
-                        : () => onDecide!(ActionDecision.accept),
+                        : () => onDecide!(ActionDecision.replace),
                   ),
                 ),
                 const SizedBox(width: MoriSpacing.s2),
-                Expanded(
-                  child: MButton(
-                    label: CopyId.batal,
-                    size: MButtonSize.md,
-                    variant: MButtonVariant.ghost,
-                    onPressed: submitting || onDecide == null
-                        ? null
-                        : () => onDecide!(ActionDecision.reject),
-                  ),
-                ),
+                Expanded(child: cancelBtn),
               ],
             ),
+          ],
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Expanded(
+            child: MButton(
+              label: CopyId.setuju,
+              size: MButtonSize.md,
+              leadingIcon: Icons.check_rounded,
+              loading: submitting,
+              onPressed:
+                  disabled ? null : () => onDecide!(ActionDecision.accept),
+            ),
+          ),
+          const SizedBox(width: MoriSpacing.s2),
+          Expanded(child: cancelBtn),
+        ],
+      ),
     );
   }
 }
@@ -486,6 +535,12 @@ class _StatusPill extends StatelessWidget {
         fg = mori.muted;
         bg = mori.dim.withValues(alpha: 0.10);
         label = CopyId.dibatalkan;
+        break;
+      case ActionCardStatus.replaced:
+        icon = Icons.swap_horiz_rounded;
+        fg = MoriColors.accent;
+        bg = MoriColors.accent.withValues(alpha: 0.12);
+        label = CopyId.diganti;
         break;
       case ActionCardStatus.pending:
         return const SizedBox.shrink();

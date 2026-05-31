@@ -158,15 +158,24 @@ class ChatController extends Notifier<ChatState> {
         return;
       }
 
-      // Accept: agenda mutation first, then mark resolved server-side.
-      await _commitToAgenda(current.action);
+      // Accept or Replace: agenda mutation first, then mark resolved
+      // server-side. Replace ("Ganti") PATCHes the colliding agenda to the
+      // proposed values instead of adding a new one.
+      final ActionCardStatus resolvedStatus;
+      if (decision == ActionDecision.replace) {
+        await _commitReplace(current.action);
+        resolvedStatus = ActionCardStatus.replaced;
+      } else {
+        await _commitToAgenda(current.action);
+        resolvedStatus = ActionCardStatus.accepted;
+      }
 
       final tid = current.turnId;
       if (tid != null && tid.isNotEmpty) {
         try {
           await _chat.acceptTurn(tid);
         } on AppError catch (e) {
-          // Agenda already committed — log/surface but keep accepted.
+          // Agenda already committed — log/surface but keep resolved.
           if (kDebugMode) debugPrint('accept ping failed: ${e.message}');
         } catch (e) {
           if (kDebugMode) debugPrint('accept ping failed: $e');
@@ -176,7 +185,7 @@ class ChatController extends Notifier<ChatState> {
       state = _replaceItem(
         idx,
         current.copyWith(
-          status: ActionCardStatus.accepted,
+          status: resolvedStatus,
           submitting: false,
         ),
       );
@@ -298,6 +307,18 @@ class ChatController extends Notifier<ChatState> {
         await _agenda.toggleDone(id);
         return;
     }
+  }
+
+  /// "Ganti" (replace): PATCH the colliding agenda to the proposed values
+  /// instead of creating a new one. Only valid for a single add that carries
+  /// a collision with a known agenda id.
+  Future<void> _commitReplace(PendingAction action) async {
+    final id =
+        action.collisions.isNotEmpty ? action.collisions.first.id : null;
+    if (id == null || id.isEmpty) {
+      throw StateError('Ganti tanpa agenda bentrok');
+    }
+    await _agenda.update(id, _updateRequestFromItem(action.asSingleItem));
   }
 
   CreateAgendaRequest _createRequestFromItem(ActionItem i) {

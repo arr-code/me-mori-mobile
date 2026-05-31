@@ -41,16 +41,18 @@ extension ActionTypeX on ActionType {
       };
 }
 
-/// User's decision on a pending turn. Accept dispatches to the agenda
-/// endpoint per [ActionType]; reject is local-only (no server call) —
-/// the backend has no native "replace" yet, so collision flow falls
-/// back to accept (keep both) or reject (cancel).
-enum ActionDecision { accept, reject }
+/// User's decision on a pending turn.
+///   - accept  → add the proposed agenda (keeps any colliding one too).
+///   - replace → on a collision, PATCH the colliding agenda to the proposed
+///               values instead (the "Ganti" button). Offered only for a
+///               single `add_agenda` that collides with an existing agenda.
+///   - reject  → local cancel (server reject ping only, no agenda mutation).
+enum ActionDecision { accept, replace, reject }
 
 /// Local UI status for a turn that included a `pending_action`. Server
 /// doesn't persist this — it lives in the chat controller across the
 /// commit round-trip.
-enum ActionCardStatus { pending, accepted, rejected }
+enum ActionCardStatus { pending, accepted, rejected, replaced }
 
 /// One item inside a batch [PendingAction]. Same field set as the
 /// top-level flat shape used for single-item actions.
@@ -143,7 +145,29 @@ class PendingAction {
   List<ActionItem> get effectiveItems =>
       items.isEmpty ? [asSingleItem] : items;
 
-  factory PendingAction.fromJson(Map<String, dynamic> json) =>
-      _$PendingActionFromJson(json);
+  factory PendingAction.fromJson(Map<String, dynamic> json) {
+    // The backend sends collision entries with `existing_*` keys (plus an
+    // `item_index`), which don't match the Agenda model's id/title/start_time.
+    // Left as-is, Agenda.fromJson throws and the *entire* card silently fails
+    // to render. Normalize them to the Agenda shape before decoding.
+    final raw = json['collisions'];
+    if (raw is List &&
+        raw.any((e) => e is Map && e.containsKey('existing_id'))) {
+      final normalized = Map<String, dynamic>.from(json);
+      normalized['collisions'] = raw.map((e) {
+        if (e is Map && e.containsKey('existing_id')) {
+          return <String, dynamic>{
+            'id': e['existing_id'],
+            'title': e['existing_title'],
+            'start_time': e['existing_start'],
+            'end_time': e['existing_end'],
+          };
+        }
+        return e;
+      }).toList();
+      return _$PendingActionFromJson(normalized);
+    }
+    return _$PendingActionFromJson(json);
+  }
   Map<String, dynamic> toJson() => _$PendingActionToJson(this);
 }
