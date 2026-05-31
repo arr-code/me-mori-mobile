@@ -1,0 +1,8 @@
+# Upload only what the Dockerfile needs (build/ is gitignored, so we must
+# explicitly re-include build/web here; .gcloudignore overrides .gitignore).
+/*
+!/Dockerfile
+!/nginx.conf
+!/build
+/build/*
+!/build/web

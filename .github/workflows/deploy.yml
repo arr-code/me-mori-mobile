@@ -1,0 +1,76 @@
+name: Deploy web to Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: me-mori-497407
+  REGION: asia-southeast1
+  SERVICE: mori-web
+  REPO: mori
+  FLUTTER_VERSION: 3.41.7
+  # Public OAuth / backend config baked into the web build.
+  MORI_API_BASE_URL: https://mori-backend-993515468883.asia-southeast1.run.app
+  MORI_GOOGLE_SERVER_CLIENT_ID: 993515468883-kn027km8uhc99dipg6u0fnb80mvt5j6v.apps.googleusercontent.com
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: ${{ env.FLUTTER_VERSION }}
+          channel: stable
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build web
+        # MORI_GOOGLE_CLIENT_ID is intentionally empty on web so the
+        # google_sign_in plugin reads the client ID from the meta tag in
+        # web/index.html instead of the (Android) constructor value.
+        run: |
+          flutter build web --release \
+            --dart-define=MORI_API_BASE_URL=${{ env.MORI_API_BASE_URL }} \
+            --dart-define=MORI_GOOGLE_CLIENT_ID= \
+            --dart-define=MORI_GOOGLE_SERVER_CLIENT_ID=${{ env.MORI_GOOGLE_SERVER_CLIENT_ID }}
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE=${{ env.REGION }}-docker.pkg.dev/${{ env.PROJECT_ID }}/${{ env.REPO }}/${{ env.SERVICE }}:${{ github.sha }}
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image "$IMAGE" \
+            --region ${{ env.REGION }} \
+            --project ${{ env.PROJECT_ID }} \
+            --allow-unauthenticated \
+            --quiet
+
+      - name: Show service URL
+        run: |
+          gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.REGION }} --project ${{ env.PROJECT_ID }} \
+            --format='value(status.url)'
