@@ -15,11 +15,13 @@ import '../../features/nickname/application/nickname_prompt_seen.dart';
 import '../../features/nickname/presentation/nickname_screen.dart';
 import '../../features/onboarding/presentation/onboarding_screen.dart';
 import '../../features/profile/presentation/profile_screen.dart';
+import '../../features/welcome/presentation/welcome_screen.dart';
 
 class AppRoutes {
   const AppRoutes._();
 
   static const splash = '/';
+  static const welcome = '/welcome';
   static const signInSelect = '/signin-select';
   static const register = '/register';
   static const login = '/login';
@@ -57,18 +59,18 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           // Stay on splash; do not redirect anywhere yet.
           return path == AppRoutes.splash ? null : AppRoutes.splash;
         case Unauthenticated():
-          // Splash is the design's Welcome surface (`01 Welcome`) — it
-          // stays reachable while unauthenticated; the "Mulai" CTA pushes
-          // the user onward to sign-in selection.
+          // Splash (Crest) is brand-only — once auth resolves to
+          // Unauthenticated, push the user to the Welcome landing page.
+          // Auth screens stay reachable so back-navigation works.
           const allowed = {
-            AppRoutes.splash,
+            AppRoutes.welcome,
             AppRoutes.signInSelect,
             AppRoutes.register,
             AppRoutes.login,
             AppRoutes.googleLoading,
           };
           if (allowed.contains(path)) return null;
-          return AppRoutes.splash;
+          return AppRoutes.welcome;
         case Authenticated(user: final user):
           final onboarded = user.hasCompletedOnboarding;
           final nicknameSeen = ref.read(nicknamePromptSeenProvider);
@@ -91,6 +93,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           // Authenticated + onboarded: keep them out of auth-only screens.
           const authOnlyPaths = {
             AppRoutes.splash,
+            AppRoutes.welcome,
             AppRoutes.signInSelect,
             AppRoutes.register,
             AppRoutes.login,
@@ -104,6 +107,7 @@ final appRouterProvider = Provider<GoRouter>((ref) {
     },
     routes: [
       _cupertino(AppRoutes.splash, const SplashScreen()),
+      _cupertino(AppRoutes.welcome, const WelcomeScreen()),
       _cupertino(AppRoutes.signInSelect, const SignInSelectScreen()),
       _cupertino(AppRoutes.register, const RegisterScreen()),
       _cupertino(AppRoutes.login, const LoginScreen()),

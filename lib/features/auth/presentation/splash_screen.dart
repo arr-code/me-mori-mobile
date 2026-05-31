@@ -1,200 +1,206 @@
 import 'package:flutter/material.dart';
-import 'package:go_router/go_router.dart';
 
 import '../../../shared/extensions/context_theme.dart';
-import '../../../shared/widgets/m_button.dart';
 import '../../../shared/widgets/mori_icon.dart';
 import '../../../shared/widgets/mori_wordmark.dart';
 import '../../../theme/mori_colors.dart';
-import '../../../theme/mori_spacing.dart';
-import '_auth_bg.dart';
+import '../../../theme/mori_typography.dart';
 
-/// Design's `01 Welcome` — first-launch sales surface. Big brand block,
-/// three numbered value pillars, "Mulai" CTA. Stays visible while the
-/// user is unauthenticated; tapping Mulai pushes them to `/signin-select`.
-///
-/// (The Crest "true splash" variants in `splash.jsx` are the boot-loader
-/// PNGs exported for `flutter_native_splash` — they aren't this widget.)
-class SplashScreen extends StatelessWidget {
+/// Design's `Splash · D — Crest` (variant 4 in splash.jsx).
+/// Brand-only boot loader — no CTAs. Concentric teal rings behind a
+/// large brand mark, an orbiting accent dot, wordmark, and a small mono
+/// caption at the foot. Shown during AuthUnknown; once auth resolves
+/// the router pushes the user on.
+class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
-  static const _pillars = <(String, String)>[
-    ('Atur jadwal lewat obrolan', 'Cukup ketik. Mori siapkan agenda.'),
-    ('Pengingat yang ringkas', 'Tidak banyak notifikasi. Hanya yang penting.'),
-    ('Kontrol penuh di tangan kamu', 'Setiap aksi butuh persetujuan kamu dulu.'),
-  ];
+  @override
+  State<SplashScreen> createState() => _SplashScreenState();
+}
+
+class _SplashScreenState extends State<SplashScreen>
+    with TickerProviderStateMixin {
+  late final AnimationController _orbit;
+  late final AnimationController _intro;
+  late final Animation<double> _iconFade;
+  late final Animation<Offset> _iconSlide;
+  late final Animation<double> _wordFade;
+  late final Animation<Offset> _wordSlide;
+
+  static const _introCurve = Cubic(0.22, 0.61, 0.36, 1);
+
+  @override
+  void initState() {
+    super.initState();
+    _orbit = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 8),
+    )..repeat();
+
+    _intro = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 950),
+    )..forward();
+
+    final iconInterval = CurvedAnimation(
+      parent: _intro,
+      curve: const Interval(0, 0.74, curve: _introCurve),
+    );
+    _iconFade = Tween<double>(begin: 0, end: 1).animate(iconInterval);
+    _iconSlide = Tween<Offset>(
+      begin: const Offset(0, 0.04),
+      end: Offset.zero,
+    ).animate(iconInterval);
+
+    final wordInterval = CurvedAnimation(
+      parent: _intro,
+      curve: const Interval(0.16, 1.0, curve: _introCurve),
+    );
+    _wordFade = Tween<double>(begin: 0, end: 1).animate(wordInterval);
+    _wordSlide = Tween<Offset>(
+      begin: const Offset(0, 0.04),
+      end: Offset.zero,
+    ).animate(wordInterval);
+  }
+
+  @override
+  void dispose() {
+    _orbit.dispose();
+    _intro.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final bg = isDark ? MoriColors.darkBg : MoriColors.lightBg;
+    final mori = context.mori;
+
     return Scaffold(
-      body: AuthGradientBg(
-        child: SafeArea(
-          minimum: const EdgeInsets.fromLTRB(
-            MoriSpacing.s8,
-            56,
-            MoriSpacing.s8,
-            MoriSpacing.s8,
+      backgroundColor: bg,
+      body: SizedBox.expand(
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            FractionalTranslation(
+              translation: const Offset(0, -0.04),
+              child: SizedBox(
+                width: 420,
+                height: 420,
+                child: Stack(
+                  alignment: Alignment.center,
+                  children: [
+                    _ConcentricRing(size: 420, alpha: isDark ? 0.10 : 0.14),
+                    _ConcentricRing(size: 340, alpha: isDark ? 0.16 : 0.21),
+                    _ConcentricRing(size: 260, alpha: isDark ? 0.22 : 0.28),
+                    _OrbitingDot(orbit: _orbit, diameter: 340),
+                  ],
+                ),
+              ),
+            ),
+            Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FadeTransition(
+                  opacity: _iconFade,
+                  child: SlideTransition(
+                    position: _iconSlide,
+                    child: const MoriIcon(size: 140, glow: true),
+                  ),
+                ),
+                const SizedBox(height: 28),
+                FadeTransition(
+                  opacity: _wordFade,
+                  child: SlideTransition(
+                    position: _wordSlide,
+                    child: const MoriWordmark(size: 34),
+                  ),
+                ),
+              ],
+            ),
+            Align(
+              alignment: Alignment.bottomCenter,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 40),
+                child: Text(
+                  'MEMENTO · MORI · MOMENTUM',
+                  style: MoriTypography.mono(
+                    size: 11,
+                    weight: FontWeight.w500,
+                    color: mori.dim,
+                  ).copyWith(letterSpacing: 1.4),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ConcentricRing extends StatelessWidget {
+  final double size;
+  final double alpha;
+  const _ConcentricRing({required this.size, required this.alpha});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: MoriColors.accent.withValues(alpha: alpha),
           ),
-          child: LayoutBuilder(
-            builder: (context, c) {
-              return SingleChildScrollView(
-                physics: const ClampingScrollPhysics(),
-                child: ConstrainedBox(
-                  constraints: BoxConstraints(minHeight: c.maxHeight),
-                  child: IntrinsicHeight(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        const Spacer(flex: 2),
-                        const _BrandHeader(),
-                        const Spacer(flex: 2),
-                        const _PillarStack(items: _pillars),
-                        const Spacer(flex: 2),
-                        MButton(
-                          label: 'Mulai',
-                          size: MButtonSize.lg,
-                          onPressed: () => context.go('/signin-select'),
-                        ),
-                        const SizedBox(height: MoriSpacing.s3),
-                        Center(
-                          child: Text(
-                            'v1.0 · Bahasa Indonesia',
-                            style: context.text.bodySmall
-                                ?.copyWith(color: context.mori.dim),
-                          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _OrbitingDot extends StatelessWidget {
+  final AnimationController orbit;
+  final double diameter;
+  const _OrbitingDot({required this.orbit, required this.diameter});
+
+  @override
+  Widget build(BuildContext context) {
+    return IgnorePointer(
+      child: SizedBox(
+        width: diameter,
+        height: diameter,
+        child: AnimatedBuilder(
+          animation: orbit,
+          builder: (_, __) {
+            return Transform.rotate(
+              angle: orbit.value * 2 * 3.1415926535,
+              child: Align(
+                alignment: Alignment.topCenter,
+                child: Transform.translate(
+                  offset: const Offset(0, -4),
+                  child: Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: MoriColors.accent,
+                      boxShadow: [
+                        BoxShadow(
+                          color: MoriColors.accent,
+                          blurRadius: 14,
+                          spreadRadius: 0,
                         ),
                       ],
                     ),
                   ),
                 ),
-              );
-            },
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _BrandHeader extends StatelessWidget {
-  const _BrandHeader();
-
-  @override
-  Widget build(BuildContext context) {
-    final mori = context.mori;
-    return Column(
-      children: [
-        const MoriIcon(size: 128, glow: true),
-        const SizedBox(height: MoriSpacing.s6),
-        const MoriWordmark(size: 40),
-        const SizedBox(height: 10),
-        Text(
-          'Asisten jadwal & pengingat',
-          style: context.text.bodyLarge?.copyWith(
-            color: mori.muted,
-            fontSize: 16,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ],
-    );
-  }
-}
-
-class _PillarStack extends StatelessWidget {
-  final List<(String, String)> items;
-  const _PillarStack({required this.items});
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        for (var i = 0; i < items.length; i++) ...[
-          if (i != 0) const SizedBox(height: MoriSpacing.s3),
-          _PillarCard(index: i + 1, title: items[i].$1, subtitle: items[i].$2),
-        ],
-      ],
-    );
-  }
-}
-
-class _PillarCard extends StatelessWidget {
-  final int index;
-  final String title;
-  final String subtitle;
-
-  const _PillarCard({
-    required this.index,
-    required this.title,
-    required this.subtitle,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final mori = context.mori;
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: MoriSpacing.s4,
-        vertical: 14,
-      ),
-      decoration: BoxDecoration(
-        color: isDark
-            ? Colors.white.withValues(alpha: 0.03)
-            : Colors.white.withValues(alpha: 0.5),
-        borderRadius: BorderRadius.circular(MoriRadius.lg),
-        border: Border.all(color: mori.borderSo),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 28,
-            height: 28,
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
-              gradient: const LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [MoriColors.accent, MoriColors.accentSo],
               ),
-            ),
-            alignment: Alignment.center,
-            child: Text(
-              '$index',
-              style: context.text.labelLarge?.copyWith(
-                color: MoriColors.accentFg,
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
-              ),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: context.text.bodyLarge?.copyWith(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                    letterSpacing: -0.1,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  subtitle,
-                  style: context.text.bodySmall?.copyWith(
-                    fontSize: 12.5,
-                    color: mori.muted,
-                    height: 1.4,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
+            );
+          },
+        ),
       ),
     );
   }

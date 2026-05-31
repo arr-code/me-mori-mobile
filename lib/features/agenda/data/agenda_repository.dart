@@ -21,6 +21,9 @@ class AgendaRepository {
   Future<List<Agenda>> fetchByDate(DateTime date) =>
       _run(() => api.getByDate(date));
 
+  Future<List<Agenda>> fetchByRange(DateTime start, DateTime end) =>
+      _run(() => api.getByRange(start, end));
+
   Future<Agenda> create(CreateAgendaRequest body) =>
       _run(() => api.create(body));
 

@@ -34,7 +34,7 @@ void main() {
   });
 
   testWidgets(
-      'Me Mori boots to Welcome and advances to signin-select via Mulai',
+      'Me Mori boots through Crest splash → Welcome → signin-select via Mulai',
       (tester) async {
     await tester.pumpWidget(
       ProviderScope(
@@ -44,16 +44,20 @@ void main() {
         child: const MeMoriApp(),
       ),
     );
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 200));
 
-    // Welcome shows brand pillars + Mulai CTA.
+    // First frame: Crest splash is on-screen.
+    await tester.pump();
+    expect(find.text('MEMENTO · MORI · MOMENTUM'), findsOneWidget);
+
+    // Auth bootstrap resolves to Unauthenticated → router pushes to /welcome.
+    await tester.pump(const Duration(milliseconds: 200));
+    await tester.pumpAndSettle();
     expect(find.text('Mulai'), findsOneWidget);
     expect(find.text('Atur jadwal lewat obrolan'), findsOneWidget);
 
+    // Mulai tap → signin-select.
     await tester.tap(find.text('Mulai'));
     await tester.pumpAndSettle();
-
     expect(find.text('Lanjut dengan Google'), findsOneWidget);
     expect(find.text('Daftar dengan Email'), findsOneWidget);
   });

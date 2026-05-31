@@ -36,6 +36,20 @@ class AgendaApi {
     return _decodeList(res.data);
   }
 
+  /// `GET /api/agenda?start=YYYY-MM-DD&end=YYYY-MM-DD` — items in a
+  /// date range (inclusive, based on the user's stored timezone).
+  Future<List<Agenda>> getByRange(DateTime start, DateTime end) async {
+    final fmt = DateFormat('yyyy-MM-dd');
+    final res = await _dio.get<List<dynamic>>(
+      '/api/agenda',
+      queryParameters: {
+        'start': fmt.format(start),
+        'end': fmt.format(end),
+      },
+    );
+    return _decodeList(res.data);
+  }
+
   /// `POST /api/agenda` — single create. Min body: `title` + `start_time`.
   Future<Agenda> create(CreateAgendaRequest body) async {
     final res = await _dio.post<Map<String, dynamic>>(

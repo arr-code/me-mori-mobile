@@ -48,18 +48,28 @@ class AuthController extends Notifier<AuthState> {
   AuthRepository get _repo => ref.read(authRepositoryProvider);
   GoogleSignIn get _google => ref.read(googleSignInProvider);
 
+  /// Minimum on-screen time for the Crest splash so the intro animation
+  /// has room to breathe. Runs in parallel with the auth check; the
+  /// resolved state is published once *both* complete.
+  static const _minSplashDuration = Duration(seconds: 5);
+
   Future<void> _bootstrap() async {
+    final splashTimer = Future<void>.delayed(_minSplashDuration);
     final token = await _repo.readToken();
+
     if (token == null || token.isEmpty) {
+      await splashTimer;
       state = const Unauthenticated();
       return;
     }
     final cached = await _repo.readCachedUser();
     if (cached == null) {
       await _repo.clearSession();
+      await splashTimer;
       state = const Unauthenticated();
       return;
     }
+    await splashTimer;
     state = Authenticated(user: cached, token: token);
     // Refresh from /api/users/me in the background so stale cached
     // users (e.g. saved before a schema/decoder fix) get reconciled.

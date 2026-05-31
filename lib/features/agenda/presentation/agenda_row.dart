@@ -1,25 +1,24 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_slidable/flutter_slidable.dart';
 
 import '../../../shared/extensions/context_theme.dart';
 import '../../../shared/extensions/date_id.dart';
 import '../../../shared/widgets/m_tag.dart';
 import '../../../theme/mori_colors.dart';
 import '../../../theme/mori_spacing.dart';
+import '../application/today_agenda_provider.dart';
+import '../data/agenda_repository.dart';
 import '../data/models/agenda.dart';
 
-/// Agenda card row used by HomeScreen list. Renders the design's three
-/// visual states from a single [Agenda]:
-///   - default
-///   - `now` (ongoing): teal-tinted gradient + "Berlangsung" pill
-///   - `done` (or past): 50% opacity + strikethrough title + "Selesai" badge
-class AgendaRow extends StatelessWidget {
+class AgendaRow extends ConsumerWidget {
   final Agenda item;
   final VoidCallback? onTap;
 
   const AgendaRow({super.key, required this.item, this.onTap});
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final mori = context.mori;
     final now = DateTime.now();
     final ongoing = item.isOngoing(now: now);
@@ -27,86 +26,50 @@ class AgendaRow extends StatelessWidget {
     final dimmed = item.isDone || past;
     final accent = MoriColors.accent;
 
-    return Opacity(
-      opacity: dimmed ? 0.5 : 1,
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    return Slidable(
+      startActionPane: ActionPane(
+        motion: const BehindMotion(),
+        extentRatio: 0.34,
         children: [
-          SizedBox(
-            width: 52,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 13),
-              child: Text(
-                DateId.time(item.startTime),
-                style: context.text.titleMedium?.copyWith(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: ongoing ? accent : context.cs.onSurface,
-                  letterSpacing: -0.1,
+          Expanded(
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFF2CB67D),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(12),
+                  bottomLeft: Radius.circular(12),
+                ),
+              ),
+              child: InkWell(
+                onTap: () => _markDone(context, ref),
+                child: Center(
+                  child: Icon(
+                    item.isDone
+                        ? Icons.undo_rounded
+                        : Icons.check_circle_outline_rounded,
+                    color: Colors.white,
+                    size: 24,
+                  ),
                 ),
               ),
             ),
           ),
-          const SizedBox(width: MoriSpacing.s3),
           Expanded(
-            child: Material(
-              color: Colors.transparent,
+            child: Container(
+              decoration: BoxDecoration(
+                color: const Color(0xFFE53170),
+                borderRadius: const BorderRadius.only(
+                  topRight: Radius.circular(12),
+                  bottomRight: Radius.circular(12),
+                ),
+              ),
               child: InkWell(
-                borderRadius: BorderRadius.circular(12),
-                onTap: onTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 12,
-                  ),
-                  decoration: BoxDecoration(
-                    gradient: ongoing
-                        ? LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              accent.withValues(alpha: 0.10),
-                              accent.withValues(alpha: 0.02),
-                            ],
-                          )
-                        : null,
-                    color: ongoing ? null : context.cs.surface,
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(
-                      color: ongoing
-                          ? accent.withValues(alpha: 0.5)
-                          : mori.borderSo,
-                    ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      _MetaRow(item: item, ongoing: ongoing),
-                      const SizedBox(height: 6),
-                      Text(
-                        item.title,
-                        style: context.text.bodyLarge?.copyWith(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: -0.2,
-                          height: 1.3,
-                          decoration: item.isDone
-                              ? TextDecoration.lineThrough
-                              : null,
-                        ),
-                      ),
-                      if ((item.description ?? '').isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Text(
-                          item.description!,
-                          style: context.text.bodySmall?.copyWith(
-                            fontSize: 12.5,
-                            color: mori.muted,
-                            height: 1.4,
-                          ),
-                        ),
-                      ],
-                    ],
+                onTap: () => _delete(context, ref),
+                child: Center(
+                  child: Icon(
+                    Icons.delete_outline_rounded,
+                    color: Colors.white,
+                    size: 24,
                   ),
                 ),
               ),
@@ -114,7 +77,133 @@ class AgendaRow extends StatelessWidget {
           ),
         ],
       ),
+      child: Opacity(
+        opacity: dimmed ? 0.5 : 1,
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: 52,
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(10, 13, 0, 0),
+                child: Text(
+                  DateId.time(item.startTime),
+                  style: context.text.titleMedium?.copyWith(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: ongoing ? accent : context.cs.onSurface,
+                    letterSpacing: -0.1,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: MoriSpacing.s4),
+            Expanded(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(12),
+                  onTap: onTap,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    decoration: BoxDecoration(
+                      gradient: ongoing
+                          ? LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [
+                                accent.withValues(alpha: 0.10),
+                                accent.withValues(alpha: 0.02),
+                              ],
+                            )
+                          : null,
+                      color: ongoing ? null : context.cs.surface,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: ongoing
+                            ? accent.withValues(alpha: 0.5)
+                            : mori.borderSo,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _MetaRow(item: item, ongoing: ongoing),
+                        const SizedBox(height: 6),
+                        Text(
+                          item.title,
+                          style: context.text.bodyLarge?.copyWith(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: -0.2,
+                            height: 1.3,
+                            decoration: item.isDone
+                                ? TextDecoration.lineThrough
+                                : null,
+                          ),
+                        ),
+                        if ((item.description ?? '').isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            item.description!,
+                            style: context.text.bodySmall?.copyWith(
+                              fontSize: 12.5,
+                              color: mori.muted,
+                              height: 1.4,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Future<void> _markDone(BuildContext context, WidgetRef ref) async {
+    final repo = ref.read(agendaRepositoryProvider);
+    await repo.toggleDone(item.id);
+    _invalidateAgenda(ref);
+  }
+
+  Future<void> _delete(BuildContext context, WidgetRef ref) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Hapus agenda?'),
+        content: Text('"${item.title}" akan dihapus.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Batal'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53170)),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final repo = ref.read(agendaRepositoryProvider);
+    await repo.delete(item.id);
+    _invalidateAgenda(ref);
+  }
+
+  static void _invalidateAgenda(WidgetRef ref) {
+    ref.invalidate(todayAgendaProvider);
+    ref.invalidate(agendaForTabProvider(HomeTab.today));
+    ref.invalidate(agendaForTabProvider(HomeTab.thisWeek));
+    ref.invalidate(agendaForTabProvider(HomeTab.custom));
   }
 }
 

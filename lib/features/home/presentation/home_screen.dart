@@ -40,7 +40,7 @@ class HomeScreen extends ConsumerWidget {
           children: [
             Column(
               children: [
-                _Header(name: user?.name, pictureUrl: user?.pictureUrl),
+                _Header(name: user?.name, pictureUrl: user?.pictureUrl, tab: tab),
                 const _TabStrip(),
                 Expanded(
                   child: RefreshIndicator(
@@ -84,15 +84,18 @@ class HomeScreen extends ConsumerWidget {
 class _Header extends ConsumerWidget {
   final String? name;
   final String? pictureUrl;
-  const _Header({this.name, this.pictureUrl});
+  final HomeTab tab;
+  const _Header({this.name, this.pictureUrl, required this.tab});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
-    final agenda = ref.watch(todayAgendaProvider);
-    final stats = agenda.maybeWhen(
-      data: _statsLine,
+    final agendaAsync = ref.watch(agendaForTabProvider(tab));
+    final stats = agendaAsync.maybeWhen(
+      data: (items) => _statsLine(items, isCustom: tab == HomeTab.custom),
       orElse: () => null,
     );
+
+    final (:label, :dateLine) = _headerCopy(tab, ref);
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 8, 20, 14),
@@ -104,7 +107,7 @@ class _Header extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'HARI INI',
+                  label,
                   style: context.text.labelSmall?.copyWith(
                     fontSize: 13,
                     color: MoriColors.accent,
@@ -114,7 +117,7 @@ class _Header extends ConsumerWidget {
                 ),
                 const SizedBox(height: 6),
                 Text(
-                  DateId.heroDate(DateTime.now()),
+                  dateLine,
                   style: context.text.headlineMedium?.copyWith(
                     fontSize: 30,
                     fontWeight: FontWeight.w700,
@@ -142,14 +145,29 @@ class _Header extends ConsumerWidget {
     );
   }
 
-  static String? _statsLine(List<Agenda> items) {
+  ({String label, String dateLine}) _headerCopy(HomeTab tab, WidgetRef ref) {
+    switch (tab) {
+      case HomeTab.today:
+        return (label: 'HARI INI', dateLine: DateId.heroDate(DateTime.now()));
+      case HomeTab.thisWeek:
+        return (label: 'MINGGU INI', dateLine: DateId.monthYear(DateTime.now()));
+      case HomeTab.custom:
+        final range = ref.read(customDateRangeProvider);
+        if (range == null) {
+          return (label: 'KOSTUM', dateLine: 'Pilih rentang tanggal');
+        }
+        final (start, end) = range;
+        final labelTxt = DateId.shortDate(start);
+        final dateLineTxt = '${DateId.longDate(start)} – ${DateId.shortDate(end)}';
+        return (label: labelTxt, dateLine: dateLineTxt);
+    }
+  }
+
+  static String? _statsLine(List<Agenda> items, {bool isCustom = false}) {
     if (items.isEmpty) return null;
-    final now = DateTime.now();
-    final ongoing = items.where((a) => a.isOngoing(now: now)).length;
     final gaps = _countGaps(items);
     final parts = ['${items.length} agenda'];
     if (gaps > 0) parts.add('$gaps jeda kosong');
-    if (ongoing > 0) parts.add('$ongoing sedang berlangsung');
     return parts.join(' · ');
   }
 
@@ -258,26 +276,54 @@ class _TabStrip extends ConsumerWidget {
   static const _tabs = <(HomeTab, String)>[
     (HomeTab.today, 'Hari ini'),
     (HomeTab.thisWeek, 'Minggu ini'),
+    (HomeTab.custom, 'Kostum'),
   ];
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final selected = ref.watch(selectedHomeTabProvider);
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 8),
-      child: Row(
-        children: [
-          for (var i = 0; i < _tabs.length; i++) ...[
-            if (i != 0) const SizedBox(width: 6),
-            _TabChip(
-              tab: _tabs[i].$1,
-              label: _tabs[i].$2,
-              active: _tabs[i].$1 == selected,
+    final customRange = ref.watch(customDateRangeProvider);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 0),
+          child: Row(
+            children: [
+              for (var i = 0; i < _tabs.length; i++) ...[
+                if (i != 0) const SizedBox(width: 6),
+                _TabChip(
+                  tab: _tabs[i].$1,
+                  label: _tabs[i].$2,
+                  active: _tabs[i].$1 == selected,
+                ),
+              ],
+            ],
+          ),
+        ),
+        if (selected == HomeTab.custom && customRange != null)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 6, 20, 8),
+            child: Text(
+              _rangeLabel(customRange),
+              style: context.text.bodySmall?.copyWith(
+                fontSize: 12,
+                color: context.mori.muted,
+              ),
             ),
-          ],
-        ],
-      ),
+          ),
+        if (selected != HomeTab.custom)
+          const SizedBox(height: 8),
+      ],
     );
+  }
+
+  static String _rangeLabel((DateTime, DateTime) range) {
+    final (start, end) = range;
+    final a = DateId.shortDate(start);
+    final b = DateId.shortDate(end);
+    return '$a – $b';
   }
 }
 
@@ -299,9 +345,11 @@ class _TabChip extends ConsumerWidget {
       color: Colors.transparent,
       borderRadius: BorderRadius.circular(999),
       child: InkWell(
-        onTap: active
-            ? null
-            : () => ref.read(selectedHomeTabProvider.notifier).state = tab,
+        onTap: tab == HomeTab.custom
+            ? () => _pickDateRange(context, ref)
+            : active
+                ? null
+                : () => ref.read(selectedHomeTabProvider.notifier).state = tab,
         borderRadius: BorderRadius.circular(999),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 160),
@@ -328,6 +376,35 @@ class _TabChip extends ConsumerWidget {
   }
 }
 
+Future<void> _pickDateRange(BuildContext context, WidgetRef ref) async {
+  final now = DateTime.now();
+  final initialRange = ref.read(customDateRangeProvider);
+  final picked = await showDateRangePicker(
+    context: context,
+    firstDate: now.subtract(const Duration(days: 365)),
+    lastDate: now.add(const Duration(days: 365)),
+    initialDateRange: initialRange != null
+        ? DateTimeRange(start: initialRange.$1, end: initialRange.$2)
+        : DateTimeRange(start: now, end: now),
+    locale: const Locale('id', 'ID'),
+    builder: (context, child) {
+      return Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: Theme.of(context).colorScheme.copyWith(
+                primary: MoriColors.accent,
+              ),
+        ),
+        child: child!,
+      );
+    },
+  );
+  if (picked != null) {
+    ref.read(customDateRangeProvider.notifier).state =
+        (picked.start, picked.end);
+    ref.read(selectedHomeTabProvider.notifier).state = HomeTab.custom;
+  }
+}
+
 // ── Timeline (agenda items + gap markers) ───────────────────────────────
 
 class _Timeline extends StatelessWidget {
@@ -345,12 +422,19 @@ class _Timeline extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(20, 14, 20, 140),
       physics: const AlwaysScrollableScrollPhysics(),
       itemCount: entries.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 6),
+      separatorBuilder: (_, i) {
+        // No gap above date headers — they bring their own breathing room.
+        if (i + 1 < entries.length && entries[i + 1] is _DateHeaderEntry) {
+          return const SizedBox(height: 16);
+        }
+        return const SizedBox(height: 6);
+      },
       itemBuilder: (_, i) {
         final e = entries[i];
         return switch (e) {
           _AgendaEntry(:final agenda) => AgendaRow(item: agenda),
           _GapEntry(:final from, :final to) => GapRow(from: from, to: to),
+          _DateHeaderEntry(:final date) => _DateHeader(date: date),
         };
       },
     );
@@ -372,15 +456,38 @@ class _GapEntry extends _TimelineEntry {
   const _GapEntry(this.from, this.to);
 }
 
+class _DateHeaderEntry extends _TimelineEntry {
+  final DateTime date;
+  const _DateHeaderEntry(this.date);
+}
+
+DateTime _dateOnly(DateTime dt) {
+  final local = dt.toLocal();
+  return DateTime(local.year, local.month, local.day);
+}
+
 List<_TimelineEntry> _buildTimelineEntries(
   List<Agenda> items, {
   required int gapThresholdMinutes,
 }) {
   final out = <_TimelineEntry>[];
+  // Only show per-day headers when the list actually spans multiple
+  // dates — keeps the single-day "Hari ini" view as before.
+  final dates = items.map((i) => _dateOnly(i.startTime)).toSet();
+  final multiDay = dates.length > 1;
+
   Agenda? prev;
+  DateTime? prevDate;
   for (final cur in items) {
+    final curDate = _dateOnly(cur.startTime);
+    final sameDayAsPrev = prevDate != null && curDate == prevDate;
+    if (multiDay && !sameDayAsPrev) {
+      out.add(_DateHeaderEntry(curDate));
+    }
     final prevEnd = prev?.endTime;
-    if (prevEnd != null) {
+    if (prevEnd != null && sameDayAsPrev) {
+      // Gaps only matter within the same calendar day — skip "Kosong
+      // · 14 jam" across day boundaries.
       final gap = cur.startTime.difference(prevEnd);
       if (gap.inMinutes >= gapThresholdMinutes) {
         out.add(_GapEntry(prevEnd, cur.startTime));
@@ -388,8 +495,40 @@ List<_TimelineEntry> _buildTimelineEntries(
     }
     out.add(_AgendaEntry(cur));
     prev = cur;
+    prevDate = curDate;
   }
   return out;
+}
+
+class _DateHeader extends StatelessWidget {
+  final DateTime date;
+  const _DateHeader({required this.date});
+
+  @override
+  Widget build(BuildContext context) {
+    final mori = context.mori;
+    final isToday = _dateOnly(DateTime.now()) == _dateOnly(date);
+    return Padding(
+      padding: const EdgeInsets.only(top: 6, bottom: 4),
+      child: Row(
+        children: [
+          Text(
+            DateId.heroDate(date).toUpperCase(),
+            style: context.text.labelSmall?.copyWith(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w700,
+              color: isToday ? MoriColors.accent : mori.muted,
+              letterSpacing: 0.6,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Container(height: 1, color: mori.borderSo),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 // ── States ──────────────────────────────────────────────────────────────
@@ -433,6 +572,11 @@ class _EmptyState extends StatelessWidget {
         return (
           title: 'Minggu ini lapang.',
           hint: 'Belum ada jadwal untuk minggu ini.',
+        );
+      case HomeTab.custom:
+        return (
+          title: 'Tidak ada agenda',
+          hint: 'Coba rentang tanggal yang lain.',
         );
     }
   }
