@@ -55,7 +55,37 @@ class AuthController extends Notifier<AuthState> {
   @override
   AuthState build() {
     _bootstrap();
+    // On web the GIS-rendered button (see googleWebButton) delivers the
+    // signed-in account through this stream rather than via signInWithGoogle().
+    if (kIsWeb) {
+      final sub = _google.onCurrentUserChanged.listen(_onWebUserChanged);
+      ref.onDispose(sub.cancel);
+    }
     return const AuthUnknown();
+  }
+
+  /// Web-only completion path: exchange the GIS idToken with the backend.
+  Future<void> _onWebUserChanged(GoogleSignInAccount? account) async {
+    if (account == null) return;
+    try {
+      final auth = await account.authentication;
+      final idToken = auth.idToken;
+      if (idToken == null || idToken.isEmpty) return;
+      final res = await _repo.google(GoogleAuthRequest(idToken: idToken));
+      // The /api/auth/google response omits profile + onboarded_at, so a
+      // user who already finished onboarding would otherwise be sent back
+      // through it. Fetch /me (token is now persisted) for the full record.
+      try {
+        final full = await ref.read(usersRepositoryProvider).getMe();
+        await _repo.persistUser(full);
+        state = Authenticated(user: full, token: res.token);
+      } catch (_) {
+        state = Authenticated(user: res.user, token: res.token);
+      }
+    } catch (e, st) {
+      if (kDebugMode) debugPrint('Web Google sign-in failed: $e\n$st');
+      state = const Unauthenticated(notice: CopyId.errNetwork);
+    }
   }
 
   AuthRepository get _repo => ref.read(authRepositoryProvider);

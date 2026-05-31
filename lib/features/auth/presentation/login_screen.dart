@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -13,6 +14,7 @@ import '../../../theme/mori_spacing.dart';
 import '../application/auth_controller.dart';
 import '_auth_form_helpers.dart';
 import '_auth_shell.dart';
+import 'google_web_button.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -187,14 +189,17 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 ],
               ),
               const SizedBox(height: 14),
-              MButton(
-                label: 'Login dengan Google',
-                onPressed: anyBusy ? null : _onGoogle,
-                loading: _googleSubmitting,
-                leadingIcon: PhosphorIconsRegular.googleLogo,
-                variant: MButtonVariant.secondary,
-                size: MButtonSize.md,
-              ),
+              if (kIsWeb)
+                Center(child: googleWebButton())
+              else
+                MButton(
+                  label: 'Login dengan Google',
+                  onPressed: anyBusy ? null : _onGoogle,
+                  loading: _googleSubmitting,
+                  leadingIcon: PhosphorIconsRegular.googleLogo,
+                  variant: MButtonVariant.secondary,
+                  size: MButtonSize.md,
+                ),
             ],
           ),
         ),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -14,6 +15,7 @@ import '../../../theme/mori_spacing.dart';
 import '../application/auth_controller.dart';
 import '../application/auth_state.dart';
 import '_auth_bg.dart';
+import 'google_web_button.dart';
 
 /// Design's `02 Pilih cara masuk` — entry point post-welcome.
 /// Google login is the secondary (low-friction) option; "Daftar dengan Email"
@@ -83,13 +85,16 @@ class _SignInSelectScreenState extends ConsumerState<SignInSelectScreen> {
                           MErrorBanner(message: banner),
                           const SizedBox(height: MoriSpacing.s3),
                         ],
-                        MButton(
-                          label: CopyId.lanjutGoogle,
-                          onPressed: _loadingGoogle ? null : _onGoogle,
-                          loading: _loadingGoogle,
-                          leadingIcon: PhosphorIconsRegular.googleLogo,
-                          variant: MButtonVariant.secondary,
-                        ),
+                        if (kIsWeb)
+                          Center(child: googleWebButton())
+                        else
+                          MButton(
+                            label: CopyId.lanjutGoogle,
+                            onPressed: _loadingGoogle ? null : _onGoogle,
+                            loading: _loadingGoogle,
+                            leadingIcon: PhosphorIconsRegular.googleLogo,
+                            variant: MButtonVariant.secondary,
+                          ),
                         const SizedBox(height: MoriSpacing.s3),
                         _OrDivider(
                           color: mori.border,

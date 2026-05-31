@@ -40,6 +40,9 @@ dependencies:
 
   # Auth
   google_sign_in: ^6.2.1
+  # Web-only: gives access to renderButton() (the GIS button); on web the
+  # deprecated signIn() popup no longer works.
+  google_sign_in_web: ^0.12.4
 
   # Animations
   lottie: ^3.1.2
